@@ -1,26 +1,31 @@
-# SMS Gateway voor SBL-portaal (Android)
+# SMS Gateway voor SBL Logistiek Portaal (Android)
 
-Deze app is in de eerste plaats gebouwd om goed samen te werken met de **SBL-app**
-([sblportaal.nl](https://sblportaal.nl)). Een Android-telefoon fungeert als sms-gateway: binnenkomende
-sms'jes van stembureaus worden direct doorgestuurd naar de API van het SBL-portaal, waar ze aan het
-juiste stembureau worden gekoppeld. Met de heartbeat zie je bovendien of de gateway-telefoon nog online is.
+Deze app is in de eerste plaats gebouwd om goed samen te werken met **SBL Logistiek Portaal**
+(StemBureauLogistiek), de webapp voor het coördineren van de logistiek rond stembureaus:
+
+- Broncode: [github.com/Bonzo261/sbl-logistiek-portaal](https://github.com/Bonzo261/sbl-logistiek-portaal)
+- Docker-image: [hub.docker.com/r/bonzo261/sbl-logistiek-portaal](https://hub.docker.com/r/bonzo261/sbl-logistiek-portaal)
+
+Een Android-telefoon fungeert als sms-gateway: binnenkomende sms'jes van stembureaus worden direct
+doorgestuurd naar de API van je eigen SBL-installatie, waar ze aan het juiste stembureau worden gekoppeld.
+Met de heartbeat zie je bovendien of de gateway-telefoon nog online is.
 
 De app is daarnaast algemeen bruikbaar: elke sms kan als JSON (HTTP POST) naar één of meer webhooks
 worden gestuurd, op basis van regels.
 
-## Koppelen met het SBL-portaal
+## Koppelen met SBL Logistiek Portaal
 Voeg in de app een regel toe met:
 
 | Veld | Waarde |
 |---|---|
-| Naam | SBL-portaal |
+| Naam | SBL |
 | Wanneer doorsturen | Alle sms (of "Bevat bepaald woord" om te filteren) |
-| Webhook URL | `https://sblportaal.nl/api/v1/berichten` |
+| Webhook URL | `https://<jouw-sbl-server>/api/v1/berichten` |
 | Header naam | `Authorization` |
 | Header waarde | `Bearer <jouw API-sleutel>` |
 | JSON-sjabloon | `{"tekst": "{{message}}"}` (knop *Voorbeeld: alleen tekst*) |
 
-De API-sleutel maak je aan in het SBL-portaal. Je kunt hem daar intrekken zonder de gateway aan te passen.
+De API-sleutel maak je aan in je SBL-installatie. Je kunt hem daar intrekken zonder de gateway aan te passen.
 Vul de sleutel alleen in de app in, en **zet hem nooit in deze repository of in de URL**.
 
 Het portaal antwoordt met `{"ok":true,"id":…,"herkend":true,"stembureau":{…}}`. De app beschouwt elk
