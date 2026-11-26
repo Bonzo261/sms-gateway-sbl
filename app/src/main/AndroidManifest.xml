@@ -10,8 +10,8 @@
 
     <application
         android:label="@string/app_name"
-        android:icon="@android:drawable/sym_action_email"
-        android:theme="@android:style/Theme.Material.Light.DarkActionBar"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.SmsGateway"
         android:usesCleartextTraffic="true">
 
         <activity

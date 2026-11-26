@@ -2,27 +2,46 @@ package nl.smsgateway
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.InputType
+import android.view.LayoutInflater
 import android.view.View
-import android.widget.*
+import android.view.ViewParent
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.textfield.TextInputLayout
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
-    private lateinit var swEnabled: Switch
+
+    private lateinit var tvSubtitle: TextView
+    private lateinit var chipPermission: Chip
+    private lateinit var chipBattery: Chip
+    private lateinit var swEnabled: MaterialSwitch
     private lateinit var rulesContainer: LinearLayout
-    private lateinit var tvPermission: TextView
     private lateinit var tvStatus: TextView
 
-    private lateinit var swHeartbeat: Switch
+    private lateinit var swHeartbeat: MaterialSwitch
     private lateinit var etHbUrl: EditText
     private lateinit var etHbInterval: EditText
     private lateinit var etHbHName: EditText
@@ -31,20 +50,38 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
 
-        tvPermission = findViewById(R.id.tvPermission)
-        tvStatus = findViewById(R.id.tvStatus)
+        tvSubtitle = findViewById(R.id.tvSubtitle)
+        chipPermission = findViewById(R.id.chipPermission)
+        chipBattery = findViewById(R.id.chipBattery)
         swEnabled = findViewById(R.id.swEnabled)
         rulesContainer = findViewById(R.id.rulesContainer)
-
+        tvStatus = findViewById(R.id.tvStatus)
         swHeartbeat = findViewById(R.id.swHeartbeat)
         etHbUrl = findViewById(R.id.etHbUrl)
         etHbInterval = findViewById(R.id.etHbInterval)
         etHbHName = findViewById(R.id.etHbHeaderName)
         etHbHValue = findViewById(R.id.etHbHeaderValue)
         tvHbStatus = findViewById(R.id.tvHbStatus)
+
+        applyInsets()
+
+        findViewById<TextView>(R.id.tvVersion).text = runCatching {
+            "versie " + packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrDefault("")
+
+        // --- Status-chips ---
+        chipPermission.setOnClickListener {
+            if (!hasSmsPermission()) {
+                if (shouldShowRequestPermissionRationale(Manifest.permission.RECEIVE_SMS) || !askedBefore) {
+                    ensureSmsPermission()
+                } else openAppSettings()
+            }
+        }
+        chipBattery.setOnClickListener { askIgnoreBattery() }
 
         // --- Doorsturen ---
         swEnabled.isChecked = prefs.enabled
@@ -56,10 +93,10 @@ class MainActivity : Activity() {
             }
             prefs.enabled = checked
             if (checked) ensureSmsPermission()
+            refreshStatus()
         }
-        findViewById<Button>(R.id.btnAddRule).setOnClickListener { editRule(null) }
-        findViewById<Button>(R.id.btnTest).setOnClickListener { sendTest() }
-        findViewById<Button>(R.id.btnBattery).setOnClickListener { askIgnoreBattery() }
+        findViewById<MaterialButton>(R.id.btnAddRule).setOnClickListener { editRule(null) }
+        findViewById<MaterialButton>(R.id.btnTest).setOnClickListener { sendTest() }
 
         // --- Heartbeat ---
         swHeartbeat.isChecked = prefs.hbEnabled
@@ -75,14 +112,16 @@ class MainActivity : Activity() {
             }
             prefs.hbEnabled = checked
             if (checked) HeartbeatWorker.startNow(this) else HeartbeatWorker.stop(this)
+            refreshStatus()
         }
-        findViewById<Button>(R.id.btnHbSave).setOnClickListener {
+        findViewById<MaterialButton>(R.id.btnHbSave).setOnClickListener {
             if (saveHeartbeatFields()) {
                 if (prefs.hbEnabled) HeartbeatWorker.startNow(this)
                 toast("Heartbeat opgeslagen")
+                refreshStatus()
             }
         }
-        findViewById<Button>(R.id.btnHbNow).setOnClickListener {
+        findViewById<MaterialButton>(R.id.btnHbNow).setOnClickListener {
             if (!saveHeartbeatFields()) return@setOnClickListener
             if (!prefs.hbEnabled) { toast("Zet de heartbeat eerst aan"); return@setOnClickListener }
             HeartbeatWorker.startNow(this)
@@ -93,9 +132,25 @@ class MainActivity : Activity() {
         ensureSmsPermission()
     }
 
+    /** Houdt rekening met statusbalk, notch, navigatiebalk en toetsenbord. */
+    private fun applyInsets() {
+        val header = findViewById<View>(R.id.header)
+        val scroll = findViewById<View>(R.id.scroll)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            header.setPadding(dp(20) + bars.left, dp(16) + bars.top, dp(20) + bars.right, dp(20))
+            scroll.setPadding(bars.left, 0, bars.right, maxOf(bars.bottom, ime.bottom))
+            insets
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        refresh()
+        renderRules()
+        refreshStatus()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -103,21 +158,36 @@ class MainActivity : Activity() {
         if (hasFocus) refreshStatus()
     }
 
-    private fun refresh() {
-        renderRules()
-        refreshStatus()
-    }
+    // ---------- Status ----------
+
+    private fun hasSmsPermission() =
+        checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
 
     private fun refreshStatus() {
-        val granted = checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+        val smsOk = hasSmsPermission()
         val battOk = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
-        tvPermission.text = buildString {
-            append(if (granted) "✅ SMS-toestemming verleend" else "⚠️ SMS-toestemming ontbreekt")
-            append("\n")
-            append(if (battOk) "✅ Batterij-optimalisatie uit" else "⚠️ Batterij-optimalisatie aan (kan vertragen)")
+
+        styleChip(chipPermission, smsOk, if (smsOk) "✓  SMS-toestemming" else "!  SMS-toestemming ontbreekt")
+        styleChip(chipBattery, battOk, if (battOk) "✓  Batterij" else "!  Batterij-optimalisatie aan")
+
+        val active = prefs.rules.count { it.enabled }
+        tvSubtitle.text = buildString {
+            append(if (prefs.enabled) "Doorsturen aan" else "Doorsturen uit")
+            append(" · $active ${if (active == 1) "regel" else "regels"}")
+            if (prefs.hbEnabled) append(" · heartbeat ${prefs.hbInterval} min")
         }
-        tvStatus.text = "Laatste status:\n" + prefs.lastStatus
-        tvHbStatus.text = "Laatste heartbeat:\n" + prefs.hbStatus
+        tvStatus.text = prefs.lastStatus
+        tvHbStatus.text = prefs.hbStatus
+    }
+
+    private fun styleChip(chip: Chip, ok: Boolean, text: String) {
+        chip.text = text
+        chip.chipBackgroundColor = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (ok) R.color.ok_container else R.color.warn_container)
+        )
+        chip.setTextColor(
+            ContextCompat.getColor(this, if (ok) R.color.on_ok_container else R.color.on_warn_container)
+        )
     }
 
     // ---------- Regels ----------
@@ -127,93 +197,83 @@ class MainActivity : Activity() {
         val rules = prefs.rules
         if (rules.isEmpty()) {
             rulesContainer.addView(TextView(this).apply {
-                text = "Nog geen regels. Voeg er een toe, bv. ‘Alle sms’ naar je webhook."
-                setPadding(0, dp(8), 0, dp(8))
+                text = "Nog geen regels. Voeg er een toe, bijvoorbeeld ‘Alle sms’ naar je webhook."
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+                setTextColor(themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant))
+                setPadding(0, 0, 0, dp(8))
             })
             return
         }
+        val inflater = LayoutInflater.from(this)
         rules.forEach { r ->
-            rulesContainer.addView(TextView(this).apply {
-                text = "${if (r.enabled) "🟢" else "⚪"}  ${r.name}\n     ${r.describe()}\n     → ${r.url}"
-                textSize = 15f
-                setPadding(dp(4), dp(10), dp(4), dp(10))
-                setBackgroundResource(android.R.drawable.list_selector_background)
-                setOnClickListener { editRule(r) }
-            })
+            val item = inflater.inflate(R.layout.item_rule, rulesContainer, false)
+            item.findViewById<TextView>(R.id.tvName).text = r.name
+            item.findViewById<TextView>(R.id.tvDesc).text =
+                r.describe() + if (r.template.isNotBlank()) "  ·  eigen JSON" else ""
+            item.findViewById<TextView>(R.id.tvUrl).text = r.url
+            item.findViewById<View>(R.id.dot).backgroundTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(this, if (r.enabled) R.color.dot_on else R.color.dot_off)
+            )
+            item.alpha = if (r.enabled) 1f else 0.6f
+            item.setOnClickListener { editRule(r) }
+            rulesContainer.addView(item)
         }
     }
 
     private fun editRule(existing: Rule?) {
         val rule = existing?.copy() ?: Rule()
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
-        }
-        fun label(t: String) = layout.addView(TextView(this).apply { text = t; setPadding(0, dp(10), 0, 0) })
-        fun field(hint: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT) =
-            EditText(this).apply { this.hint = hint; setText(value); inputType = type }.also { layout.addView(it) }
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_rule, null)
 
-        label("Naam")
-        val etName = field("bv. Bank, Alarm, Alles", rule.name)
-        label("Wanneer doorsturen")
-        val spType = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                Rule.Type.values().map { it.label }
-            )
-            setSelection(rule.type.ordinal)
-        }
-        layout.addView(spType)
-        val etValue = field("", rule.value)
-        label("Webhook URL")
-        val etUrl = field("https://…", rule.url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        label("Extra header (optioneel)")
-        val etHN = field("Authorization", rule.headerName)
-        val etHV = field("Bearer jouw-token", rule.headerValue,
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        label("JSON-sjabloon (optioneel – leeg = standaard)")
-        val etTpl = EditText(this).apply {
-            hint = "{\"tekst\": \"{{message}}\"}"
-            setText(rule.template)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            minLines = 2
-            typeface = android.graphics.Typeface.MONOSPACE
-        }
-        layout.addView(etTpl)
-        layout.addView(TextView(this).apply {
-            text = "Placeholders: " + Template.PLACEHOLDERS.joinToString(" ") { "{{$it}}" }
-            textSize = 12f
-        })
-        layout.addView(Button(this).apply {
-            text = "Voorbeeld: alleen tekst"
-            setOnClickListener { etTpl.setText("{\"tekst\": \"{{message}}\"}") }
-        })
-        val cbEnabled = CheckBox(this).apply { text = "Regel actief"; isChecked = rule.enabled }
-        layout.addView(cbEnabled)
+        val etName = view.findViewById<EditText>(R.id.etName)
+        val actType = view.findViewById<AutoCompleteTextView>(R.id.actType)
+        val tilValue = view.findViewById<TextInputLayout>(R.id.tilValue)
+        val etValue = view.findViewById<EditText>(R.id.etValue)
+        val etUrl = view.findViewById<EditText>(R.id.etUrl)
+        val etHN = view.findViewById<EditText>(R.id.etHName)
+        val etHV = view.findViewById<EditText>(R.id.etHValue)
+        val tilTpl = view.findViewById<TextInputLayout>(R.id.tilTpl)
+        val etTpl = view.findViewById<EditText>(R.id.etTpl)
+        val swRule = view.findViewById<MaterialSwitch>(R.id.swRuleEnabled)
 
-        spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                when (Rule.Type.values()[pos]) {
-                    Rule.Type.ALL -> etValue.visibility = View.GONE
-                    Rule.Type.SENDER -> {
-                        etValue.visibility = View.VISIBLE
-                        etValue.hint = "Nummer(s)/afzender, komma-gescheiden: 0612345678, ING"
-                        etValue.inputType = InputType.TYPE_CLASS_TEXT
-                    }
-                    Rule.Type.KEYWORD -> {
-                        etValue.visibility = View.VISIBLE
-                        etValue.hint = "Woord(en), komma-gescheiden: alarm, code"
-                        etValue.inputType = InputType.TYPE_CLASS_TEXT
-                    }
+        etName.setText(rule.name)
+        etValue.setText(rule.value)
+        etUrl.setText(rule.url)
+        etHN.setText(rule.headerName)
+        etHV.setText(rule.headerValue)
+        etTpl.setText(rule.template)
+        swRule.isChecked = rule.enabled
+        tilTpl.helperText = "Leeg = standaard. Placeholders: " +
+            Template.PLACEHOLDERS.joinToString(" ") { "{{$it}}" }
+        view.findViewById<MaterialButton>(R.id.btnTplExample).setOnClickListener {
+            etTpl.setText("{\"tekst\": \"{{message}}\"}")
+        }
+
+        val types = Rule.Type.values()
+        var selectedType = rule.type
+        actType.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, types.map { it.label }))
+        fun applyType(t: Rule.Type) {
+            selectedType = t
+            when (t) {
+                Rule.Type.ALL -> tilValue.visibility = View.GONE
+                Rule.Type.SENDER -> {
+                    tilValue.visibility = View.VISIBLE
+                    tilValue.hint = "Nummer(s) of afzender"
+                    tilValue.helperText = "Komma-gescheiden, bv. 0612345678, ING"
+                }
+                Rule.Type.KEYWORD -> {
+                    tilValue.visibility = View.VISIBLE
+                    tilValue.hint = "Woord(en)"
+                    tilValue.helperText = "Komma-gescheiden, bv. alarm, code"
                 }
             }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
         }
+        actType.setText(rule.type.label, false)
+        applyType(rule.type)
+        actType.setOnItemClickListener { _, _, pos, _ -> applyType(types[pos]) }
 
-        val builder = AlertDialog.Builder(this)
+        val builder = MaterialAlertDialogBuilder(this)
             .setTitle(if (existing == null) "Nieuwe regel" else "Regel bewerken")
-            .setView(ScrollView(this).apply { addView(layout) })
+            .setView(view)
             .setPositiveButton("Opslaan", null)
             .setNegativeButton("Annuleren", null)
         if (existing != null) builder.setNeutralButton("Verwijderen") { _, _ -> confirmDelete(existing) }
@@ -221,26 +281,26 @@ class MainActivity : Activity() {
 
         dlg.setOnShowListener {
             dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val type = Rule.Type.values()[spType.selectedItemPosition]
+                listOf(etValue, etUrl, etTpl).forEach { it.showError(null) }
                 val value = etValue.text.toString().trim()
                 val url = etUrl.text.toString().trim()
-                when {
-                    !Http.isValidUrl(url) -> { etUrl.error = "Geldige http(s) URL nodig"; return@setOnClickListener }
-                    type != Rule.Type.ALL && value.isEmpty() -> {
-                        etValue.error = "Vul een nummer of woord in"; return@setOnClickListener
-                    }
-                }
                 val tpl = etTpl.text.toString().trim()
-                if (tpl.isNotEmpty()) {
-                    Template.validate(tpl)?.let { etTpl.error = it; return@setOnClickListener }
+                if (!Http.isValidUrl(url)) {
+                    etUrl.showError("Geldige http(s) URL nodig"); return@setOnClickListener
                 }
-                rule.template = tpl
-                rule.type = type
-                rule.value = if (type == Rule.Type.ALL) "" else value
+                if (selectedType != Rule.Type.ALL && value.isEmpty()) {
+                    etValue.showError("Vul een nummer of woord in"); return@setOnClickListener
+                }
+                if (tpl.isNotEmpty()) {
+                    Template.validate(tpl)?.let { etTpl.showError(it); return@setOnClickListener }
+                }
+                rule.type = selectedType
+                rule.value = if (selectedType == Rule.Type.ALL) "" else value
                 rule.url = url
                 rule.headerName = etHN.text.toString().trim()
                 rule.headerValue = etHV.text.toString().trim()
-                rule.enabled = cbEnabled.isChecked
+                rule.template = tpl
+                rule.enabled = swRule.isChecked
                 rule.name = etName.text.toString().trim().ifEmpty { rule.describe() }
 
                 val list = prefs.rules
@@ -249,18 +309,24 @@ class MainActivity : Activity() {
                 prefs.rules = list
                 dlg.dismiss()
                 renderRules()
+                refreshStatus()
             }
         }
         dlg.show()
     }
 
     private fun confirmDelete(rule: Rule) {
-        AlertDialog.Builder(this)
-            .setMessage("Regel ‘${rule.name}’ verwijderen?")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Regel verwijderen?")
+            .setMessage("‘${rule.name}’ wordt verwijderd.")
             .setPositiveButton("Verwijderen") { _, _ ->
                 prefs.rules = prefs.rules.filterNot { it.id == rule.id }.toMutableList()
-                if (prefs.rules.none { it.enabled }) { prefs.enabled = false; swEnabled.isChecked = false }
+                if (prefs.rules.none { it.enabled }) {
+                    prefs.enabled = false
+                    swEnabled.isChecked = false
+                }
                 renderRules()
+                refreshStatus()
             }
             .setNegativeButton("Annuleren", null)
             .show()
@@ -282,10 +348,12 @@ class MainActivity : Activity() {
     // ---------- Heartbeat ----------
 
     private fun saveHeartbeatFields(): Boolean {
+        etHbUrl.showError(null)
+        etHbInterval.showError(null)
         val url = etHbUrl.text.toString().trim()
         val interval = etHbInterval.text.toString().toIntOrNull()
-        if (!Http.isValidUrl(url)) { etHbUrl.error = "Geldige http(s) URL nodig"; return false }
-        if (interval == null || interval < 1) { etHbInterval.error = "Minimaal 1 minuut"; return false }
+        if (!Http.isValidUrl(url)) { etHbUrl.showError("Geldige http(s) URL nodig"); return false }
+        if (interval == null || interval < 1) { etHbInterval.showError("Minimaal 1 minuut"); return false }
         prefs.hbUrl = url
         prefs.hbInterval = interval
         prefs.hbHeaderName = etHbHName.text.toString()
@@ -293,10 +361,13 @@ class MainActivity : Activity() {
         return true
     }
 
-    // ---------- Overig ----------
+    // ---------- Toestemmingen ----------
+
+    private var askedBefore = false
 
     private fun ensureSmsPermission() {
-        if (checkSelfPermission(Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasSmsPermission()) {
+            askedBefore = true
             requestPermissions(arrayOf(Manifest.permission.RECEIVE_SMS), 1)
         }
     }
@@ -304,9 +375,15 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, perms, results)
         if (results.isNotEmpty() && results[0] != PackageManager.PERMISSION_GRANTED) {
-            toast("Zonder SMS-toestemming werkt de gateway niet. Zie App-info → Toestemmingen.")
+            toast("Zonder SMS-toestemming werkt de gateway niet. Tik op de rode chip om het te regelen.")
         }
         refreshStatus()
+    }
+
+    private fun openAppSettings() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        )
     }
 
     @SuppressLint("BatteryLife")
@@ -319,6 +396,25 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         }
+    }
+
+    // ---------- Hulpjes ----------
+
+    /** Toont de fout netjes onder het Material-invoerveld. */
+    private fun EditText.showError(msg: String?) {
+        var p: ViewParent? = parent
+        while (p != null && p !is TextInputLayout) p = p.parent
+        if (p is TextInputLayout) {
+            p.error = msg
+            p.isErrorEnabled = msg != null
+        } else error = msg
+    }
+
+    private fun themeColor(attr: Int): Int {
+        val ta = obtainStyledAttributes(intArrayOf(attr))
+        val c = ta.getColor(0, 0)
+        ta.recycle()
+        return c
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
