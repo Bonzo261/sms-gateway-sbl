@@ -42,17 +42,22 @@ class SmsReceiver : BroadcastReceiver() {
         fun buildPayload(
             from: String, body: String, ts: Long, subId: Int, slot: Int,
             rule: Rule, test: Boolean
-        ): String = JSONObject()
-            .put("type", "sms")
-            .put("from", from)
-            .put("message", body)
-            .put("timestamp", ts)
-            .put("received_at", Http.iso(ts))
-            .put("subscription_id", subId)
-            .put("sim_slot", slot)
-            .put("rule", rule.name)
-            .put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
-            .put("test", test)
-            .toString()
-    }
+        ): String {
+            val values = linkedMapOf<String, Any>(
+                "from" to from,
+                "message" to body,
+                "timestamp" to ts,
+                "received_at" to Http.iso(ts),
+                "subscription_id" to subId,
+                "sim_slot" to slot,
+                "rule" to rule.name,
+                "device" to "${Build.MANUFACTURER} ${Build.MODEL}",
+                "test" to test,
+            )
+            if (rule.template.isNotBlank()) return Template.render(rule.template, values)
+
+            val json = JSONObject().put("type", "sms")
+            values.forEach { (k, v) -> json.put(k, v) }
+            return json.toString()
+        }
 }

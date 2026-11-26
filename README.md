@@ -43,6 +43,16 @@ en daarnaast een regel "Bevat: alarm" naar Home Assistant.
 }
 ```
 
+### Eigen JSON-sjabloon
+Verwacht je software andere veldnamen? Vul bij de regel een JSON-sjabloon in. Placeholders:
+`{{message}}` `{{from}}` `{{timestamp}}` `{{received_at}}` `{{sim_slot}}` `{{subscription_id}}` `{{rule}}` `{{device}}` `{{test}}`.
+Tekst wordt automatisch veilig gemaakt voor JSON (quotes, enters). Zet tekst-placeholders tussen aanhalingstekens.
+
+Voorbeeld voor een API die `tekst` verwacht:
+```json
+{"tekst": "{{message}}"}
+```
+
 ## Heartbeat
 Stuurt elke *N* minuten een POST naar de heartbeat-URL. Werkt goed met bijvoorbeeld
 Healthchecks.io, Uptime Kuma (push-monitor) of een Home Assistant-webhook.

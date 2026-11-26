@@ -171,6 +171,24 @@ class MainActivity : Activity() {
         val etHN = field("Authorization", rule.headerName)
         val etHV = field("Bearer jouw-token", rule.headerValue,
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        label("JSON-sjabloon (optioneel – leeg = standaard)")
+        val etTpl = EditText(this).apply {
+            hint = "{\"tekst\": \"{{message}}\"}"
+            setText(rule.template)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            minLines = 2
+            typeface = android.graphics.Typeface.MONOSPACE
+        }
+        layout.addView(etTpl)
+        layout.addView(TextView(this).apply {
+            text = "Placeholders: " + Template.PLACEHOLDERS.joinToString(" ") { "{{$it}}" }
+            textSize = 12f
+        })
+        layout.addView(Button(this).apply {
+            text = "Voorbeeld: alleen tekst"
+            setOnClickListener { etTpl.setText("{\"tekst\": \"{{message}}\"}") }
+        })
         val cbEnabled = CheckBox(this).apply { text = "Regel actief"; isChecked = rule.enabled }
         layout.addView(cbEnabled)
 
@@ -212,6 +230,11 @@ class MainActivity : Activity() {
                         etValue.error = "Vul een nummer of woord in"; return@setOnClickListener
                     }
                 }
+                val tpl = etTpl.text.toString().trim()
+                if (tpl.isNotEmpty()) {
+                    Template.validate(tpl)?.let { etTpl.error = it; return@setOnClickListener }
+                }
+                rule.template = tpl
                 rule.type = type
                 rule.value = if (type == Rule.Type.ALL) "" else value
                 rule.url = url

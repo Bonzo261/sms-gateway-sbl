@@ -17,6 +17,8 @@ data class Rule(
     var headerName: String = "",
     var headerValue: String = "",
     var enabled: Boolean = true,
+    /** Optioneel eigen JSON-sjabloon met {{placeholders}}; leeg = standaard-payload */
+    var template: String = "",
 ) {
     enum class Type(val label: String) {
         ALL("Alle sms"),
@@ -43,7 +45,7 @@ data class Rule(
 
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("name", name).put("type", type.name).put("value", value)
-        .put("url", url).put("hn", headerName).put("hv", headerValue).put("enabled", enabled)
+        .put("url", url).put("hn", headerName).put("hv", headerValue).put("enabled", enabled).put("tpl", template)
 
     companion object {
         fun fromJson(o: JSONObject) = Rule(
@@ -55,6 +57,7 @@ data class Rule(
             headerName = o.optString("hn"),
             headerValue = o.optString("hv"),
             enabled = o.optBoolean("enabled", true),
+            template = o.optString("tpl", ""),
         )
 
         /**
