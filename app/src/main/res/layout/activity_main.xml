@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:id="@+id/tvPermission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnBattery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Batterij-optimalisatie uitzetten" />
+
+        <!-- ===== Doorsturen ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingTop="20dp"
+            android:text="SMS doorsturen"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Switch
+            android:id="@+id/swEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="8dp"
+            android:text="Doorsturen actief"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Regels (tik om te bewerken). Een sms gaat naar elke actieve regel die past."
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/rulesContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingVertical="8dp" />
+
+        <Button
+            android:id="@+id/btnAddRule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="+ Regel toevoegen" />
+
+        <Button
+            android:id="@+id/btnTest"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test naar alle actieve regels" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textIsSelectable="true" />
+
+        <!-- ===== Heartbeat ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingTop="24dp"
+            android:text="Heartbeat"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Switch
+            android:id="@+id/swHeartbeat"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="8dp"
+            android:text="Heartbeat actief"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etHbUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Heartbeat URL, bv. https://hc-ping.com/…"
+            android:inputType="textUri" />
+
+        <EditText
+            android:id="@+id/etHbInterval"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Interval in minuten (bv. 15)"
+            android:inputType="number" />
+
+        <EditText
+            android:id="@+id/etHbHeaderName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Header naam (optioneel)"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/etHbHeaderValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Header waarde (optioneel)"
+            android:inputType="textPassword" />
+
+        <Button
+            android:id="@+id/btnHbSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Heartbeat opslaan" />
+
+        <Button
+            android:id="@+id/btnHbNow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Nu een ping sturen" />
+
+        <TextView
+            android:id="@+id/tvHbStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:textIsSelectable="true" />
+    </LinearLayout>
+</ScrollView>
