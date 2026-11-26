@@ -1,7 +1,30 @@
-# SMS Gateway (Android)
+# SMS Gateway voor SBL-portaal (Android)
 
-Stuurt binnenkomende sms'jes als JSON (HTTP POST) door naar één of meer webhooks,
-op basis van regels. Plus een heartbeat die op een vast interval laat weten dat de telefoon nog leeft.
+Deze app is in de eerste plaats gebouwd om goed samen te werken met de **SBL-app**
+([sblportaal.nl](https://sblportaal.nl)). Een Android-telefoon fungeert als sms-gateway: binnenkomende
+sms'jes van stembureaus worden direct doorgestuurd naar de API van het SBL-portaal, waar ze aan het
+juiste stembureau worden gekoppeld. Met de heartbeat zie je bovendien of de gateway-telefoon nog online is.
+
+De app is daarnaast algemeen bruikbaar: elke sms kan als JSON (HTTP POST) naar één of meer webhooks
+worden gestuurd, op basis van regels.
+
+## Koppelen met het SBL-portaal
+Voeg in de app een regel toe met:
+
+| Veld | Waarde |
+|---|---|
+| Naam | SBL-portaal |
+| Wanneer doorsturen | Alle sms (of "Bevat bepaald woord" om te filteren) |
+| Webhook URL | `https://sblportaal.nl/api/v1/berichten` |
+| Header naam | `Authorization` |
+| Header waarde | `Bearer <jouw API-sleutel>` |
+| JSON-sjabloon | `{"tekst": "{{message}}"}` (knop *Voorbeeld: alleen tekst*) |
+
+De API-sleutel maak je aan in het SBL-portaal. Je kunt hem daar intrekken zonder de gateway aan te passen.
+Vul de sleutel alleen in de app in, en **zet hem nooit in deze repository of in de URL**.
+
+Het portaal antwoordt met `{"ok":true,"id":…,"herkend":true,"stembureau":{…}}`. De app beschouwt elk
+2xx-antwoord als afgeleverd; of een stembureau herkend is, zie je in het portaal.
 
 ## Bouwen
 1. Open deze map in Android Studio (Ladybug of nieuwer) en laat Gradle synchroniseren.
