@@ -60,4 +60,5 @@ class SmsReceiver : BroadcastReceiver() {
             values.forEach { (k, v) -> json.put(k, v) }
             return json.toString()
         }
+    }
 }
